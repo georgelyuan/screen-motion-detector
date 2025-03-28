@@ -141,9 +141,12 @@ class MotionDetector:
                          (255, 0, 255),  # Purple color
                          2)
             
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            # Use datetime with milliseconds for unique filenames
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:19]  # Truncate to 3 decimal places
             filename = os.path.join(self.output_dir, f"motion_{timestamp}.png")
-            cv2.imwrite(filename, vis_frame)
+            
+            # Save with PNG compression (9 is maximum compression)
+            cv2.imwrite(filename, vis_frame, [cv2.IMWRITE_PNG_COMPRESSION, 9])
             print(f"Saved screenshot: {filename}")
             self.last_capture_time = current_time
 
@@ -177,16 +180,18 @@ if __name__ == "__main__":
     temp_detector = MotionDetector(0)
     monitors = temp_detector.list_monitors()
     
-    # Ask user which monitor to capture
-    while True:
-        try:
-            monitor_number = int(input("\nEnter the monitor number to capture: "))
-            if 0 <= monitor_number < len(monitors):
-                break
-            print("Invalid monitor number. Please try again.")
-        except ValueError:
-            print("Please enter a valid number.")
+    # Default to monitor 2, but keep the selection code for future use
+    monitor_number = 2  # Default to monitor 2
+    # Uncomment the following lines to enable monitor selection
+    # while True:
+    #     try:
+    #         monitor_number = int(input("\nEnter the monitor number to capture: "))
+    #         if 0 <= monitor_number < len(monitors):
+    #             break
+    #         print("Invalid monitor number. Please try again.")
+    #     except ValueError:
+    #         print("Please enter a valid number.")
     
     # Create and run the motion detector with the selected monitor
-    detector = MotionDetector(monitor_number)
+    detector = MotionDetector(monitor_number=monitor_number)
     detector.run() 
