@@ -53,11 +53,34 @@ class MotionDetector:
         mask[height-ignore_height:height, 0:ignore_width] = 255
         return mask
 
+    def find_largest_motion_region(self, diff, mask):
+        """Find the largest region of motion"""
+        # Apply threshold
+        _, thresh = cv2.threshold(diff, self.threshold, 255, cv2.THRESH_BINARY)
+        
+        # Apply mask to ignore bottom left corner
+        thresh = cv2.bitwise_and(thresh, thresh, mask=cv2.bitwise_not(mask))
+        
+        # Find contours
+        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        if not contours:
+            return None, None
+        
+        # Find the largest contour
+        largest_contour = max(contours, key=cv2.contourArea)
+        if cv2.contourArea(largest_contour) < self.min_area:
+            return None, None
+            
+        # Get bounding box
+        x, y, w, h = cv2.boundingRect(largest_contour)
+        return (x, y, w, h), largest_contour
+
     def detect_motion(self, frame):
         """Detect motion in the current frame"""
         if self.prev_frame is None:
             self.prev_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            return False
+            return False, None
 
         # Convert current frame to grayscale
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -65,32 +88,32 @@ class MotionDetector:
         # Calculate difference between current and previous frame
         diff = cv2.absdiff(gray, self.prev_frame)
         
-        # Apply threshold
-        _, thresh = cv2.threshold(diff, self.threshold, 255, cv2.THRESH_BINARY)
-        
-        # Create and apply mask to ignore bottom left corner
+        # Create and apply mask
         mask = self.create_mask(frame)
-        thresh = cv2.bitwise_and(thresh, thresh, mask=cv2.bitwise_not(mask))
         
-        # Find contours
-        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        
-        # Check for significant motion
-        for contour in contours:
-            if cv2.contourArea(contour) > self.min_area:
-                return True
+        # Find largest motion region
+        bbox, contour = self.find_largest_motion_region(diff, mask)
         
         # Update previous frame
         self.prev_frame = gray
-        return False
+        
+        return bbox is not None, bbox
 
-    def save_screenshot(self, frame):
+    def save_screenshot(self, frame, bbox):
         """Save the current frame as a screenshot"""
         current_time = time.time()
         if current_time - self.last_capture_time >= self.capture_delay:
+            # Create a copy of the frame for visualization
+            vis_frame = frame.copy()
+            
+            # Draw red bounding box if motion was detected
+            if bbox:
+                x, y, w, h = bbox
+                cv2.rectangle(vis_frame, (x, y), (x+w, y+h), (0, 0, 255), 2)
+            
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = os.path.join(self.output_dir, f"motion_{timestamp}.png")
-            cv2.imwrite(filename, frame)
+            cv2.imwrite(filename, vis_frame)
             print(f"Saved screenshot: {filename}")
             self.last_capture_time = current_time
 
@@ -108,9 +131,10 @@ class MotionDetector:
                 frame = self.capture_screen()
                 
                 # Detect motion
-                if self.detect_motion(frame):
+                motion_detected, bbox = self.detect_motion(frame)
+                if motion_detected:
                     print("Motion detected!")
-                    self.save_screenshot(frame)
+                    self.save_screenshot(frame, bbox)
                 
                 # Small delay to reduce CPU usage
                 time.sleep(0.1)
