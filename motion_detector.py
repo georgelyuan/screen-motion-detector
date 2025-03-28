@@ -7,11 +7,11 @@ import os
 from datetime import datetime
 
 class MotionDetector:
-    def __init__(self, monitor_number, threshold=50, min_area=100):
+    def __init__(self, monitor_number, threshold=30, min_area=100):
         """
         Initialize the motion detector
         :param monitor_number: The monitor number to capture
-        :param threshold: threshold for motion detection (default: 50)
+        :param threshold: threshold for motion detection (default: 30)
         :param min_area: minimum area of motion to trigger detection (default: 100)
         """
         self.sct = mss.mss()
@@ -21,7 +21,7 @@ class MotionDetector:
         self.prev_frame = None
         self.output_dir = "motion_captures"
         self.last_capture_time = 0
-        self.capture_delay = 0.5  # Minimum delay between captures in seconds
+        self.capture_delay = 0.2  # Minimum delay between captures in seconds
         
         # Create output directory if it doesn't exist
         if not os.path.exists(self.output_dir):
@@ -42,15 +42,25 @@ class MotionDetector:
         return cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
 
     def create_mask(self, frame):
-        """Create a mask to ignore the bottom left corner"""
+        """Create a mask to ignore the bottom left corner and right edge"""
         height, width = frame.shape[:2]
         # Create a black mask (0) with white region (255) to ignore
         mask = np.zeros((height, width), dtype=np.uint8)
+        
         # Define the region to ignore (bottom left corner)
-        # Adjust these values based on your timestamp size and position
         ignore_height = 150  # Height of the ignored region
         ignore_width = 200  # Width of the ignored region
         mask[height-ignore_height:height, 0:ignore_width] = 255
+        
+        # Define the region to ignore (right edge)
+        right_ignore_width = 450  # Width of the ignored region on the right
+        mask[0:height, width-right_ignore_width:width] = 255
+
+        # Define the region to ignore (top portion)
+        top_ignore_height = 140  # Height of the ignored region at the top
+        mask[0:top_ignore_height, 0:width] = 255
+
+        
         return mask
 
     def find_largest_motion_region(self, diff, mask):
@@ -110,6 +120,26 @@ class MotionDetector:
             if bbox:
                 x, y, w, h = bbox
                 cv2.rectangle(vis_frame, (x, y), (x+w, y+h), (0, 0, 255), 2)
+            
+            # Draw purple bounding boxes around masked regions
+            height, width = vis_frame.shape[:2]
+            
+            # Bottom left corner mask (timestamp region)
+            ignore_height = 150
+            ignore_width = 200
+            cv2.rectangle(vis_frame, 
+                         (0, height-ignore_height), 
+                         (ignore_width, height), 
+                         (255, 0, 255),  # Purple color
+                         2)
+            
+            # Right edge mask
+            right_ignore_width = 450
+            cv2.rectangle(vis_frame, 
+                         (width-right_ignore_width, 0), 
+                         (width, height), 
+                         (255, 0, 255),  # Purple color
+                         2)
             
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = os.path.join(self.output_dir, f"motion_{timestamp}.png")
