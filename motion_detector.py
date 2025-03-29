@@ -7,17 +7,33 @@ import os
 from datetime import datetime
 
 class MotionDetector:
-    def __init__(self, monitor_number, threshold=25, min_area=100):
+    """
+    A class to detect motion in a specific region of the screen and save screenshots.
+    
+    This class uses OpenCV to compare consecutive screen captures and detect motion
+    by calculating the mean squared error between frames. When motion is detected
+    above a specified threshold, it saves a screenshot of the current screen state.
+    
+    The motion detection algorithm:
+    1. Captures the specified screen region
+    2. Converts the image to grayscale
+    3. Compares with the previous frame using mean squared error
+    4. Triggers if the error exceeds the threshold (default: 25)
+    """
+    
+    def __init__(self, monitor_number=2, threshold=25):
         """
-        Initialize the motion detector
-        :param monitor_number: The monitor number to capture
-        :param threshold: threshold for motion detection (default: 25)
-        :param min_area: minimum area of motion to trigger detection (default: 100)
+        Initialize the motion detector.
+        
+        Args:
+            monitor_number (int): The monitor number to capture (default: 2)
+            threshold (float): Motion detection threshold (default: 25)
+                             Higher values mean less sensitive to motion
         """
         self.sct = mss.mss()
         self.monitor_number = monitor_number
         self.threshold = threshold
-        self.min_area = min_area
+        self.min_area = 100
         self.prev_frame = None
         self.output_dir = "motion_captures"
         self.last_capture_time = 0
@@ -88,31 +104,48 @@ class MotionDetector:
         x, y, w, h = cv2.boundingRect(largest_contour)
         return (x, y, w, h), largest_contour
 
-    def detect_motion(self, frame):
-        """Detect motion in the current frame"""
+    def detect_motion(self, current_frame):
+        """
+        Detect motion by comparing current frame with previous frame.
+        
+        Args:
+            current_frame (numpy.ndarray): Current frame in grayscale
+            
+        Returns:
+            bool: True if motion is detected, False otherwise
+            tuple: Bounding box coordinates (x, y, w, h) if motion detected, None otherwise
+        """
         if self.prev_frame is None:
-            self.prev_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            self.prev_frame = current_frame
             return False, None
 
-        # Convert current frame to grayscale
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        
         # Calculate difference between current and previous frame
-        diff = cv2.absdiff(gray, self.prev_frame)
+        diff = cv2.absdiff(current_frame, self.prev_frame)
         
         # Create and apply mask
-        mask = self.create_mask(frame)
+        mask = self.create_mask(current_frame)
         
         # Find largest motion region
         bbox, contour = self.find_largest_motion_region(diff, mask)
         
         # Update previous frame
-        self.prev_frame = gray
+        self.prev_frame = current_frame
         
         return bbox is not None, bbox
 
-    def save_screenshot(self, frame, bbox):
-        """Save the current frame as a screenshot"""
+    def save_screenshot(self, frame, bounding_box=None):
+        """
+        Save the current frame as a screenshot with optional motion bounding box.
+        
+        Args:
+            frame (numpy.ndarray): The frame to save
+            bounding_box (tuple): Optional bounding box coordinates (x, y, w, h)
+            
+        The screenshot is saved as a JPEG file with:
+        - 95% quality for good balance of quality and file size
+        - Filename format: motion_YYYYMMDD_HHMMSS_mmm.jpg
+        - Timing measurement for performance monitoring
+        """
         current_time = time.time()
         if current_time - self.last_capture_time >= self.capture_delay:
             # Start timing
@@ -122,8 +155,8 @@ class MotionDetector:
             vis_frame = frame.copy()
             
             # Draw red bounding box if motion was detected
-            if bbox:
-                x, y, w, h = bbox
+            if bounding_box:
+                x, y, w, h = bounding_box
                 cv2.rectangle(vis_frame, (x, y), (x+w, y+h), (0, 0, 255), 2)
             
             # Draw purple bounding boxes around masked regions
