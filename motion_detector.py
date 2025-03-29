@@ -7,11 +7,11 @@ import os
 from datetime import datetime
 
 class MotionDetector:
-    def __init__(self, monitor_number, threshold=20, min_area=100):
+    def __init__(self, monitor_number, threshold=25, min_area=100):
         """
         Initialize the motion detector
         :param monitor_number: The monitor number to capture
-        :param threshold: threshold for motion detection (default: 20)
+        :param threshold: threshold for motion detection (default: 25)
         :param min_area: minimum area of motion to trigger detection (default: 100)
         """
         self.sct = mss.mss()
