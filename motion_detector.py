@@ -7,11 +7,11 @@ import os
 from datetime import datetime
 
 class MotionDetector:
-    def __init__(self, monitor_number, threshold=30, min_area=100):
+    def __init__(self, monitor_number, threshold=20, min_area=100):
         """
         Initialize the motion detector
         :param monitor_number: The monitor number to capture
-        :param threshold: threshold for motion detection (default: 30)
+        :param threshold: threshold for motion detection (default: 20)
         :param min_area: minimum area of motion to trigger detection (default: 100)
         """
         self.sct = mss.mss()
@@ -21,7 +21,7 @@ class MotionDetector:
         self.prev_frame = None
         self.output_dir = "motion_captures"
         self.last_capture_time = 0
-        self.capture_delay = 0.2  # Minimum delay between captures in seconds
+        self.capture_delay = 0.1  # Minimum delay between captures in seconds
         
         # Create output directory if it doesn't exist
         if not os.path.exists(self.output_dir):
@@ -38,7 +38,9 @@ class MotionDetector:
     def capture_screen(self):
         """Capture the specified monitor"""
         screenshot = self.sct.grab(self.sct.monitors[self.monitor_number])
+        #print(f"Capture time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')}")
         img = Image.frombytes('RGB', screenshot.size, screenshot.rgb)
+
         return cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
 
     def create_mask(self, frame):
@@ -49,7 +51,7 @@ class MotionDetector:
         
         # Define the region to ignore (bottom left corner)
         ignore_height = 150  # Height of the ignored region
-        ignore_width = 200  # Width of the ignored region
+        ignore_width = 1600  # Width of the ignored region
         mask[height-ignore_height:height, 0:ignore_width] = 255
         
         # Define the region to ignore (right edge)
@@ -113,6 +115,9 @@ class MotionDetector:
         """Save the current frame as a screenshot"""
         current_time = time.time()
         if current_time - self.last_capture_time >= self.capture_delay:
+            # Start timing
+            save_start = time.time()
+            
             # Create a copy of the frame for visualization
             vis_frame = frame.copy()
             
@@ -123,10 +128,12 @@ class MotionDetector:
             
             # Draw purple bounding boxes around masked regions
             height, width = vis_frame.shape[:2]
+            ignore_height = 150  # Height of the ignored region
+            ignore_width = 1600  # Width of the ignored region
+
             
             # Bottom left corner mask (timestamp region)
-            ignore_height = 150
-            ignore_width = 200
+
             cv2.rectangle(vis_frame, 
                          (0, height-ignore_height), 
                          (ignore_width, height), 
@@ -141,13 +148,26 @@ class MotionDetector:
                          (255, 0, 255),  # Purple color
                          2)
             
+            # top 
+            top_ignore_height = 140  # Height of the ignored region at the top
+            # draw a rectangle on the top of the screen
+            cv2.rectangle(vis_frame, 
+                         (0, 0), 
+                         (width, top_ignore_height), 
+                         (255, 0, 255),  # Purple color
+                         2)
+            
             # Use datetime with milliseconds for unique filenames
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:19]  # Truncate to 3 decimal places
-            filename = os.path.join(self.output_dir, f"motion_{timestamp}.png")
+            filename = os.path.join(self.output_dir, f"motion_{timestamp}.jpg")
             
-            # Save with PNG compression (9 is maximum compression)
-            cv2.imwrite(filename, vis_frame, [cv2.IMWRITE_PNG_COMPRESSION, 9])
-            print(f"Saved screenshot: {filename}")
+            # Save with JPEG compression (95% quality, much faster than PNG)
+            cv2.imwrite(filename, vis_frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
+            
+            # Calculate and print timing
+            save_time = time.time() - save_start
+            print(f"Saved screenshot: {filename} (took {save_time:.3f} seconds)")
+            
             self.last_capture_time = current_time
 
     def run(self):
@@ -170,7 +190,7 @@ class MotionDetector:
                     self.save_screenshot(frame, bbox)
                 
                 # Small delay to reduce CPU usage
-                time.sleep(0.1)
+                time.sleep(0.01)
                 
         except KeyboardInterrupt:
             print("\nStopping motion detection...")
